@@ -153,7 +153,7 @@ class Member(namedtuple('Member', 'index,name,session,data')):
         defaults = {
             "host": None,
             "port": None,
-            "database": None
+            "dbname": None
         }
         ret = self.data.get('conn_kwargs')
         if ret:
@@ -167,7 +167,7 @@ class Member(namedtuple('Member', 'index,name,session,data')):
             ret = {
                 'host': r.hostname,
                 'port': r.port or 5432,
-                'database': r.path[1:]
+                'dbname': r.path[1:]
             }
             self.data['conn_kwargs'] = ret.copy()
 
