@@ -1,6 +1,5 @@
 import logging
 import os
-import psycopg2
 import shlex
 import shutil
 import subprocess
@@ -10,19 +9,20 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dateutil import tz
 from datetime import datetime
-from patroni.postgresql.callback_executor import CallbackExecutor
-from patroni.postgresql.bootstrap import Bootstrap
-from patroni.postgresql.cancellable import CancellableSubprocess
-from patroni.postgresql.config import ConfigHandler, mtime
-from patroni.postgresql.connection import Connection, get_connection_cursor
-from patroni.postgresql.misc import parse_history, parse_lsn, postgres_major_version_to_int
-from patroni.postgresql.postmaster import PostmasterProcess
-from patroni.postgresql.slots import SlotsHandler
-from patroni.exceptions import PostgresConnectionException
-from patroni.utils import Retry, RetryFailedError, polling_loop, data_directory_is_empty, parse_int
 from psutil import TimeoutExpired
 from threading import current_thread, Lock
 
+from .callback_executor import CallbackExecutor
+from .bootstrap import Bootstrap
+from .cancellable import CancellableSubprocess
+from .config import ConfigHandler, mtime
+from .connection import Connection, get_connection_cursor
+from .misc import parse_history, parse_lsn, postgres_major_version_to_int
+from .postmaster import PostmasterProcess
+from .slots import SlotsHandler
+from .. import psycopg
+from ..exceptions import PostgresConnectionException
+from ..utils import Retry, RetryFailedError, polling_loop, data_directory_is_empty, parse_int
 
 logger = logging.getLogger(__name__)
 
@@ -255,13 +255,13 @@ class Postgresql(object):
             cursor = self._connection.cursor()
             cursor.execute(sql, params)
             return cursor
-        except psycopg2.Error as e:
+        except psycopg.Error as e:
             if cursor and cursor.connection.closed == 0:
                 # When connected via unix socket, psycopg2 can't recoginze 'connection lost'
                 # and leaves `_cursor_holder.connection.closed == 0`, but psycopg2.OperationalError
                 # is still raised (what is correct). It doesn't make sense to continiue with existing
                 # connection and we will close it, to avoid its reuse by the `cursor` method.
-                if isinstance(e, psycopg2.OperationalError):
+                if isinstance(e, psycopg.OperationalError):
                     self._connection.close()
                 else:
                     raise e
@@ -524,7 +524,7 @@ class Postgresql(object):
                     if cur.fetchone()[0]:
                         return 'is_in_recovery=true'
                 return cur.execute('CHECKPOINT')
-        except psycopg2.Error:
+        except psycopg.Error:
             logger.exception('Exception during CHECKPOINT')
             return 'not accessible or not healty'
 
@@ -614,7 +614,7 @@ class Postgresql(object):
                 while postmaster.is_running():  # Need a timeout here?
                     cur.execute("SELECT 1")
                     time.sleep(STOP_POLLING_INTERVAL)
-        except psycopg2.Error:
+        except psycopg.Error:
             pass
 
     def reload(self, block_callbacks=False):
@@ -869,7 +869,7 @@ class Postgresql(object):
             with self.connection().cursor() as cursor:
                 cursor.execute(query)
                 return cursor.fetchone()[0].isoformat(sep=' ')
-        except psycopg2.Error:
+        except psycopg.Error:
             return None
 
     def last_operation(self):

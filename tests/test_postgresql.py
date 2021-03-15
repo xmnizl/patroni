@@ -2,12 +2,14 @@ import datetime
 import mock  # for the mock.call method, importing it without a namespace breaks python3
 import os
 import psutil
-import psycopg2
 import re
 import subprocess
 import time
 
 from mock import Mock, MagicMock, PropertyMock, patch, mock_open
+
+import patroni.psycopg as psycopg
+
 from patroni.async_executor import CriticalTask
 from patroni.dcs import Cluster, ClusterConfig, Member, RemoteMember, SyncState
 from patroni.exceptions import PostgresConnectionException, PatroniException
@@ -18,7 +20,7 @@ from patroni.utils import RetryFailedError
 from six.moves import builtins
 from threading import Thread, current_thread
 
-from . import BaseTestPostgresql, MockCursor, MockPostmaster, psycopg2_connect
+from . import BaseTestPostgresql, MockCursor, MockPostmaster, psycopg_connect
 
 
 mtime_ret = {}
@@ -88,7 +90,7 @@ Data page checksum version:           0
 
 
 @patch('subprocess.call', Mock(return_value=0))
-@patch('psycopg2.connect', psycopg2_connect)
+@patch('patroni.psycopg.connect', psycopg_connect)
 class TestPostgresql(BaseTestPostgresql):
 
     @patch('subprocess.call', Mock(return_value=0))
@@ -310,7 +312,7 @@ class TestPostgresql(BaseTestPostgresql):
                                              'A': 0, 'ls': 0, 'b': {'type': 'logical', 'plugin': '1'}},
                                    'ignore_slots': [{'name': 'blabla'}]}, 1)
         cluster = Cluster(True, config, self.leader, 0, [self.me, self.other, self.leadermem], None, None, None)
-        with mock.patch('patroni.postgresql.Postgresql._query', Mock(side_effect=psycopg2.OperationalError)):
+        with mock.patch('patroni.postgresql.Postgresql._query', Mock(side_effect=psycopg.OperationalError)):
             self.p.slots_handler.sync_replication_slots(cluster)
         self.p.slots_handler.sync_replication_slots(cluster)
         with mock.patch('patroni.postgresql.Postgresql.role', new_callable=PropertyMock(return_value='replica')):
@@ -326,7 +328,7 @@ class TestPostgresql(BaseTestPostgresql):
             self.assertTrue("test-3" in ca, "non matching {0}".format(ca))
             self.assertTrue("test.3" in ca, "non matching {0}".format(ca))
 
-    @patch.object(MockCursor, 'execute', Mock(side_effect=psycopg2.OperationalError))
+    @patch.object(MockCursor, 'execute', Mock(side_effect=psycopg.OperationalError))
     def test__query(self):
         self.assertRaises(PostgresConnectionException, self.p._query, 'blabla')
         self.p._state = 'restarting'
@@ -335,7 +337,7 @@ class TestPostgresql(BaseTestPostgresql):
     def test_query(self):
         self.p.query('select 1')
         self.assertRaises(PostgresConnectionException, self.p.query, 'RetryFailedError')
-        self.assertRaises(psycopg2.ProgrammingError, self.p.query, 'blabla')
+        self.assertRaises(psycopg.ProgrammingError, self.p.query, 'blabla')
 
     @patch.object(Postgresql, 'pg_isready', Mock(return_value=STATE_REJECT))
     def test_is_leader(self):
@@ -410,7 +412,7 @@ class TestPostgresql(BaseTestPostgresql):
     @patch.object(Postgresql, 'is_running', Mock(return_value=MockPostmaster()))
     def test_is_leader_exception(self):
         self.p.start()
-        self.p.query = Mock(side_effect=psycopg2.OperationalError("not supported"))
+        self.p.query = Mock(side_effect=psycopg.OperationalError("not supported"))
         self.assertTrue(self.p.stop())
 
     @patch('os.rename', Mock())
@@ -530,7 +532,7 @@ class TestPostgresql(BaseTestPostgresql):
             t.start()
             t.join()
 
-        with patch.object(MockCursor, "execute", side_effect=psycopg2.Error):
+        with patch.object(MockCursor, "execute", side_effect=psycopg.Error):
             self.assertIsNone(self.p.postmaster_start_time())
 
     def test_check_for_startup(self):
@@ -693,7 +695,7 @@ class TestPostgresql(BaseTestPostgresql):
             self.p.stop(on_safepoint=mock_callback)
 
             mock_postmaster.is_running.side_effect = [True, False, False]
-            with patch.object(MockCursor, "execute", Mock(side_effect=psycopg2.Error)):
+            with patch.object(MockCursor, "execute", Mock(side_effect=psycopg.Error)):
                 self.p.stop(on_safepoint=mock_callback)
 
     def test_terminate_starting_postmaster(self):

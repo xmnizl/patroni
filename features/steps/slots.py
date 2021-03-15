@@ -1,5 +1,5 @@
 from behave import step, then
-import psycopg2 as pg
+import patroni.psycopg as pg
 
 
 @step('I create a logical replication slot {slot_name} on {pg_name:w} with the {plugin:w} plugin')
