@@ -114,8 +114,7 @@ class TestRaft(unittest.TestCase):
     def test_raft(self):
         raft = Raft({'ttl': 30, 'scope': 'test', 'name': 'pg', 'self_addr': '127.0.0.1:1234',
                      'retry_timeout': 10, 'data_dir': self._TMP})
-        raft.set_retry_timeout(20)
-        raft.set_ttl(60)
+        raft.reload_config({'retry_timeout': 20, 'ttl': 60, 'loop_wait': 10})
         self.assertTrue(raft._sync_obj.set(raft.members_path + 'legacy', '{"version":"2.0.0"}'))
         self.assertTrue(raft.touch_member(''))
         self.assertTrue(raft.initialize())
@@ -123,7 +122,8 @@ class TestRaft(unittest.TestCase):
         self.assertTrue(raft.set_config_value('{}'))
         self.assertTrue(raft.write_sync_state('foo', 'bar'))
         self.assertTrue(raft.manual_failover('foo', 'bar'))
-        raft.get_cluster()
+        with patch.object(KVStoreTTL, 'isReady', Mock(return_value=False)):
+            raft.get_cluster()
         self.assertTrue(raft._sync_obj.set(raft.status_path, '{"optime":1234567,"slots":{"ls":12345}}'))
         raft.get_cluster()
         self.assertTrue(raft.update_leader('1'))

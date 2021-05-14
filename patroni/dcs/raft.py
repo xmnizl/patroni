@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 import threading
 import time
 
@@ -30,11 +31,11 @@ class _TCPTransport(TCPTransport):
             return False
 
 
-class _TCPNode(TCPNode):
+def resolve_host(self):
+    return globalDnsResolver().resolve(self.host)
 
-    @property
-    def ip(self):
-        return globalDnsResolver().resolve(self.host)
+
+setattr(TCPNode, 'ip', property(resolve_host))
 
 
 class SyncObjUtility(object):
@@ -68,8 +69,7 @@ class DynMemberSyncObj(SyncObj):
 
         partnerAddrs = [member for member in (members or partnerAddrs) if member != selfAddress]
 
-        super(DynMemberSyncObj, self).__init__(selfAddress, partnerAddrs, conf,
-                                               nodeClass=_TCPNode, transportClass=_TCPTransport)
+        super(DynMemberSyncObj, self).__init__(selfAddress, partnerAddrs, conf, transportClass=_TCPTransport)
 
         if add_self:
             thread = threading.Thread(target=utility.executeCommand, args=(['add', selfAddress],))
@@ -309,6 +309,7 @@ class Raft(AbstractDCS):
 
     def _load_cluster(self):
         prefix = self.client_path('')
+        is_ready = self._sync_obj.isReady()
         response = self._sync_obj.get(prefix, recursive=True)
         if not response:
             return Cluster(None, None, None, None, [], None, None, None, None)
@@ -344,6 +345,10 @@ class Raft(AbstractDCS):
             last_lsn = int(last_lsn)
         except Exception:
             last_lsn = 0
+        # make Patroni think that the current node is lagging too much is pysyncobj isn't ready yet
+        # otherwise there is a chance that the node could attempt to acquire the lock and succeed.
+        if not is_ready:
+            last_lsn = sys.maxsize
 
         # get list of members
         members = [self.member(k, n) for k, n in nodes.items() if k.startswith(self._MEMBERS) and k.count('/') == 1]
